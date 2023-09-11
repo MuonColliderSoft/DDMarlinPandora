@@ -7,7 +7,6 @@
 #include <IMPL/LCRelationImpl.h>
 #include <EVENT/LCParameters.h>
 #include <UTIL/CellIDDecoder.h>
-#include <UTIL/LCRelationNavigator.h>
 
 // #include <algorithm>
 // #include <string>
@@ -47,8 +46,8 @@ DDSimpleMuonDigi::DDSimpleMuonDigi() : Processor("DDSimpleMuonDigi") {
 			    "MUONOutputCollection" , 
 			    "Muon Collection of real Hits" , 
 			    _outputMuonCollection , 
-			    std::string("MUON")) ; 
-  
+			    std::string("MUON")) ;
+ // 
   registerOutputCollection( LCIO::LCRELATION, 
 			    "RelationOutputCollection" , 
 			    "CaloHit Relation Collection" , 
@@ -169,6 +168,7 @@ void DDSimpleMuonDigi::init() {
 void DDSimpleMuonDigi::processRunHeader( LCRunHeader* /*run*/) {
   _nRun++ ;
   _nEvt = 0;
+  //AGGIUNGERE qui leggiamo il file e teniamo in memoria le variabili che ci servono per riempire allo stesso modo ogni evento
 } 
 
 void DDSimpleMuonDigi::processEvent( LCEvent * evt ) { 
@@ -179,14 +179,13 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 
 
   LCCollectionVec *muoncol = new LCCollectionVec(LCIO::CALORIMETERHIT);
-  // Relation collection CalorimeterHit, SimCalorimeterHit
-  LCCollection* chschcol = 0;
-  UTIL::LCRelationNavigator calohitNav = UTIL::LCRelationNavigator( LCIO::CALORIMETERHIT, LCIO::SIMCALORIMETERHIT );
+  LCCollectionVec *relcol  = new LCCollectionVec(LCIO::LCRELATION);
 
   LCFlagImpl flag;
 
   flag.setBit(LCIO::CHBIT_LONG);
   flag.setBit(LCIO::CHBIT_ID1);
+  flag.setBit(LCIO::RCHBIT_TIME); //store timing on output hits.
 
   muoncol->setFlag(flag.getFlag());
 
@@ -218,6 +217,33 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 	if( !useLayer(caloLayout, layer) ) continue;
 	float calibr_coeff(1.);
 	calibr_coeff = _calibrCoeffMuon;
+	//CHIARA FOR TIMING
+	float x = hit->getPosition()[0];
+	float y = hit->getPosition()[1];
+	float z = hit->getPosition()[2];
+	float r = sqrt(x*x+y*y+z*z);
+	float rxy = sqrt(x*x+y*y);
+	float cost = fabs(z)/r;
+	float dt = r/300. -0.1;
+	const unsigned int n = hit->getNMCContributions();
+	std::vector<bool> used(n, false);
+	float timei=0;
+	for(unsigned int i_t=0; i_t<n; i_t++){
+		timei = hit->getTimeCont(i_t);
+		//std::cout << "time " << timei<< endl;
+		if(!used[i_t]){
+                // merge with other hits?
+                	used[i_t] = true;
+                	for(unsigned int j_t =i_t+1; j_t<n;j_t++){
+                  		if(!used[j_t]){
+                    			float timej   = hit->getTimeCont(j_t);
+					if (timej < timei){
+			  			timei = timej;
+					}
+		      		}
+		    	} 
+                  }  
+        }
 	float hitEnergy = calibr_coeff*energy;
 	if(hitEnergy>_maxHitEnergyMuon)hitEnergy=_maxHitEnergyMuon;
 	if (hitEnergy > _thresholdMuon) {
@@ -227,10 +253,14 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 	  calhit->setEnergy(hitEnergy);
 	  calhit->setPosition(hit->getPosition());
 	  calhit->setType( CHT( CHT::muon, CHT::yoke, caloLayout ,  idDecoder(hit)[ _cellIDLayerString ] ) );
+	  calhit->setTime(timei);
+	  //std::cout << "time " << computeHitTime(hit) << std::endl;
 	  calhit->setTime( computeHitTime(hit) );
 	  calhit->setRawHit(hit);
 	  muoncol->addElement(calhit);
-	  calohitNav.addRelation(calhit, hit, 1.0);
+	  //std::cout << " time mu " << calhit->getTime()<<std::endl;
+	  LCRelationImpl *rel = new LCRelationImpl(calhit,hit,1.);
+	  relcol->addElement( rel );
 	}
 
       }
@@ -240,9 +270,7 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
   }
   muoncol->parameters().setValue(LCIO::CellIDEncoding,initString);
   evt->addCollection(muoncol,_outputMuonCollection.c_str());
-  // Create and add relation collection for ECAL/HCAL to event
-  chschcol = calohitNav.createLCCollection();
-  evt->addCollection(chschcol,_outputRelCollection.c_str());
+  evt->addCollection(relcol,_outputRelCollection.c_str());
 
 
   _nEvt++;
