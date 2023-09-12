@@ -255,7 +255,7 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 	  calhit->setType( CHT( CHT::muon, CHT::yoke, caloLayout ,  idDecoder(hit)[ _cellIDLayerString ] ) );
 	  calhit->setTime(timei);
 	  //std::cout << "time " << computeHitTime(hit) << std::endl;
-	  calhit->setTime( computeHitTime(hit) );
+//	  calhit->setTime( computeHitTime(hit) );
 	  calhit->setRawHit(hit);
 	  muoncol->addElement(calhit);
 	  //std::cout << " time mu " << calhit->getTime()<<std::endl;
