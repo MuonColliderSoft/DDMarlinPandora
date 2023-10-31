@@ -224,7 +224,7 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 	float r = sqrt(x*x+y*y+z*z);
 	float rxy = sqrt(x*x+y*y);
 	float cost = fabs(z)/r;
-	float dt = r/300. -0.1;
+	float dt = r/300.;
 	const unsigned int n = hit->getNMCContributions();
 	std::vector<bool> used(n, false);
 	float timei=0;
@@ -246,7 +246,8 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
         }
 	float hitEnergy = calibr_coeff*energy;
 	if(hitEnergy>_maxHitEnergyMuon)hitEnergy=_maxHitEnergyMuon;
-	if (hitEnergy > _thresholdMuon) {
+	timei = timei-dt;
+	if (hitEnergy > _thresholdMuon && timei>0 && timei<=0.05) {
 	  CalorimeterHitImpl * calhit = new CalorimeterHitImpl();
 	  calhit->setCellID0(cellid);
 	  calhit->setCellID1(cellid1);
