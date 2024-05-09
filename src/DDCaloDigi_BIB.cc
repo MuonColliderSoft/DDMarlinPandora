@@ -162,7 +162,7 @@ bool applyDifferentialThresholdEcalBIB(CalorimeterHitImpl * calhit, bool useCril
     
     if (eff*calhit->getEnergy()>eff_BIB*eth && abs(t)<0.250) pass = true;
 
-    cout << nx << " " << nz << " " << calhit->getEnergy()*1000 << " " << x << " " << y << " " << z << " " << t << endl;   
+    //cout << nx << " " << nz << " " << calhit->getEnergy()*1000 << " " << x << " " << y << " " << z << " " << t << endl;   
 
     double energy = eff*calhit->getEnergy();
     if (energy>0) calhit->setEnergy(energy);
