@@ -60,6 +60,14 @@ IF( PANDORA_MONITORING )
     ENDIF()
 ENDIF()
 
+OPTION( TBB_ENABLED "Use Intel TBB for internal parallelization" OFF )
+IF( TBB_ENABLED )
+    FIND_PACKAGE( TBB REQUIRED )
+    IF( TBB_FOUND )
+        MESSAGE( STATUS "Found TBB library")
+    ENDIF()
+ENDIF()
+
 ### DOCUMENTATION ###########################################################
 
 OPTION( INSTALL_DOC "Set to OFF to skip build/install Documentation" OFF )
@@ -76,6 +84,11 @@ ENDIF()
 
 # add library
 ADD_SHARED_LIBRARY( DDMarlinPandora ${DDMarlinPandora_SRCS} )
+
+IF( TBB_ENABLED AND TBB_FOUND )
+    TARGET_LINK_LIBRARIES(DDMarlinPandora TBB::tbb)
+    ADD_COMPILE_DEFINITIONS( "TBB_ENABLED" )
+ENDIF()
 
 
 ### INSTALL #################################################################

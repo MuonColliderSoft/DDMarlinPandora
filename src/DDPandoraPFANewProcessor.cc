@@ -11,6 +11,7 @@
 
 
 #include "Api/PandoraApi.h"
+#include "Pandora/StatusCodes.h"
 
 #include "LCContent.h"
 #include "LCPlugins/LCSoftwareCompensation.h"
@@ -28,6 +29,8 @@
 #include "DDTrackCreatorCLIC.h"
 
 #include "DDBFieldPlugin.h"
+
+#include "ParConeClusteringAlgorithm.h"
 
 
 #include <cstdlib>
@@ -295,6 +298,9 @@ pandora::StatusCode DDPandoraPFANewProcessor::RegisterUserComponents() const
 {
     PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, LCContent::RegisterAlgorithms(*m_pPandora));
     PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, LCContent::RegisterBasicPlugins(*m_pPandora));
+
+    PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, PandoraApi::RegisterAlgorithmFactory(*m_pPandora,
+        "ConeClustering", new ParConeClusteringAlgorithmFactory));
 
     if(m_settings.m_useDD4hepField)
     {
