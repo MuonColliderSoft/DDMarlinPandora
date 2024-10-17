@@ -198,7 +198,10 @@ StatusCode ParConeClusteringAlgorithm::GetCurrentClusterFitResults(const Cluster
 {
     if (!clusterFitResultMap.empty())
         return STATUS_CODE_INVALID_PARAMETER;
-
+#ifdef TBB_ENABLED
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, clusterVector.size()),
+            CurrentClusterFit(*this, clusterVector, clusterFitResultMap));
+#else
     for (ClusterVector::const_iterator iter = clusterVector.begin(); iter != clusterVector.end(); ++iter)
     {
         const Cluster *const pCluster = *iter;
@@ -244,7 +247,7 @@ StatusCode ParConeClusteringAlgorithm::GetCurrentClusterFitResults(const Cluster
         if (!clusterFitResultMap.insert(ClusterFitResultMap::value_type(pCluster, clusterFitResult)).second)
             return STATUS_CODE_FAILURE;
     }
-
+#endif
     return STATUS_CODE_SUCCESS;
 }
 
@@ -947,3 +950,62 @@ StatusCode ParConeClusteringAlgorithm::ReadSettings(const TiXmlHandle xmlHandle)
 
     return STATUS_CODE_SUCCESS;
 }
+
+
+
+
+#ifdef TBB_ENABLED
+void ParConeClusteringAlgorithm::CurrentClusterFit::operator()(const tbb::blocked_range<std::size_t>& crange) const
+{
+    for (std::size_t idx = crange.begin(); idx != crange.end(); ++idx)
+    {
+        const Cluster *const pCluster = clusterVector[idx];
+        ClusterFitResult clusterFitResult;
+
+        if (pCluster->GetNCaloHits() > 1)
+        {
+            const unsigned int innerLayer(pCluster->GetInnerPseudoLayer());
+            const unsigned int outerLayer(pCluster->GetOuterPseudoLayer());
+            const unsigned int nLayersSpanned(outerLayer - innerLayer);
+
+            if (nLayersSpanned > coneAlgorithm.m_nLayersSpannedForFit)
+            {
+                unsigned int nLayersToFit(coneAlgorithm.m_nLayersToFit);
+
+                if (pCluster->GetMipFraction() - coneAlgorithm.m_nLayersToFitLowMipCut < std::numeric_limits<float>::epsilon())
+                    nLayersToFit *= coneAlgorithm.m_nLayersToFitLowMipMultiplier;
+
+                const unsigned int startLayer( (nLayersSpanned > nLayersToFit) ? (outerLayer - nLayersToFit) : innerLayer);
+                (void) ClusterFitHelper::FitLayerCentroids(pCluster, startLayer, outerLayer, clusterFitResult);
+
+                if (clusterFitResult.IsFitSuccessful())
+                {
+                    const float dotProduct(clusterFitResult.GetDirection().GetDotProduct(pCluster->GetInitialDirection()));
+                    const float chi2(clusterFitResult.GetChi2());
+
+                    if (((dotProduct < coneAlgorithm.m_fitSuccessDotProductCut1) &&
+                            (chi2 > coneAlgorithm.m_fitSuccessChi2Cut1)) ||
+                        ((dotProduct < coneAlgorithm.m_fitSuccessDotProductCut2) &&
+                                (chi2 > coneAlgorithm.m_fitSuccessChi2Cut2)) )
+                    {
+                        clusterFitResult.SetSuccessFlag(false);
+                    }
+                }
+            }
+            else if (nLayersSpanned > coneAlgorithm.m_nLayersSpannedForApproxFit)
+            {
+                const CartesianVector centroidChange(pCluster->GetCentroid(outerLayer) - pCluster->GetCentroid(innerLayer));
+                clusterFitResult.Reset();
+                clusterFitResult.SetDirection(centroidChange.GetUnitVector());
+                clusterFitResult.SetSuccessFlag(true);
+            }
+        }
+
+        {
+            tbb::queuing_mutex::scoped_lock lock(coneAlgorithm.p_mutex);
+            if (!clusterFitResultMap.insert(ClusterFitResultMap::value_type(pCluster, clusterFitResult)).second)
+                p_result = STATUS_CODE_FAILURE;
+        }
+    }
+}
+#endif

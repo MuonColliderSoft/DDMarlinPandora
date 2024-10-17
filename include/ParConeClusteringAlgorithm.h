@@ -22,6 +22,12 @@
 using lc_content::KDTreeLinkerAlgo;
 using lc_content::KDTreeNodeInfoT;
 
+#ifdef TBB_ENABLED
+#include "tbb/tbb.h"
+#include "Pandora/AlgorithmHeaders.h"
+#include "Pandora/StatusCodes.h"
+#endif
+
 /**
  *  @brief  ConeClusteringAlgorithm class
  */
@@ -236,6 +242,35 @@ private:
     float           m_mipTrackChi2Cut;              ///< Max value of fit chi2 for track seeded cluster to retain its IsMipTrack status
 
     unsigned int    m_firstLayer;                   ///< cache the pseudo layer at IP
+
+#ifdef TBB_ENABLED
+
+    mutable tbb::queuing_mutex p_mutex;
+
+    class CurrentClusterFit
+    {
+        using Cluster = pandora::Cluster;
+        using ClusterVector = std::vector<const Cluster*>;
+    public:
+        CurrentClusterFit(const ParConeClusteringAlgorithm& algo, const ClusterVector& c_vector, ClusterFitResultMap& c_fitMap) :
+            coneAlgorithm(algo),
+            clusterVector(c_vector),
+            clusterFitResultMap(c_fitMap),
+            p_result(pandora::STATUS_CODE_SUCCESS)
+        {}
+        virtual ~CurrentClusterFit() {}
+
+        void operator()(const tbb::blocked_range<std::size_t>& crange) const;
+
+    private:
+        const ParConeClusteringAlgorithm& coneAlgorithm;
+        const ClusterVector& clusterVector;
+        ClusterFitResultMap& clusterFitResultMap;
+        mutable pandora::StatusCode p_result;
+    };
+
+#endif
+
 };
 
 class ParConeClusteringAlgorithmFactory : public pandora::AlgorithmFactory
