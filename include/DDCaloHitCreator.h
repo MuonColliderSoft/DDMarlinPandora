@@ -87,6 +87,12 @@ public:
         float           m_eCalScToHadGeVBarrel;                 ///< The calibration from deposited Sc-layer energy on the endcaps to hadronic energy
         float           m_eCalSiToHadGeVEndCap;                 ///< The calibration from deposited Si-layer energy on the enecaps to hadronic energy
         float           m_eCalScToHadGeVEndCap;                 ///< The calibration from deposited Sc-layer energy on the endcaps to hadronic energy
+
+
+        /// LEOP == HIT ENERGY OFFSET SUBTRACTION BY ECAL REGION (SAME ORG AS CALODIGI_BIB)
+        /// It works for a 6-layers CRILIN ECal, the geometry is hardcoded
+        FloatVector m_crilinBarrelOffsets;
+        FloatVector m_crilinEndcapOffsets;
         
         
         ///ADDED BY NIKIFOROS
@@ -252,6 +258,10 @@ private:
 
     dd4hep::VolumeManager m_volumeManager; ///< DD4hep volume manager
 
+    ///LEOP == function to subtract energy offset inCRIILIN ECal
+    float GetOffsetCrilinBarrel(float &x, float &y, float &z);
+    float GetOffsetCrilinEndcap(float &x, float &y, float &z);
+    float SubtractedEnergy(float x, float y, float z, float en, bool useEndcap);
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

@@ -854,6 +854,17 @@ void DDPandoraPFANewProcessor::ProcessSteeringFile()
                                "The minimum correction to on ecal hit in Pandora energy correction",
                                m_settings.m_minCleanCorrectedHitEnergy,
                                softwareCompensationParameters.m_minCleanCorrectedHitEnergy);
+
+    ///LEOP == offset subtraction in ECal
+    registerProcessorParameter("CrilinBarrelOffsets",
+                               "Energy offsets to subtract in CRILIN ECal barrel in MeV",
+                               m_caloHitCreatorSettings.m_crilinBarrelOffsets,
+                               std::vector<float>({0.,0.,0.,0.,0.,0.}));
+                               
+    registerProcessorParameter("CrilinEndcapOffsets",
+                               "Energy offsets to subtract in CRILIN ECal endcap in MeV",
+                               m_caloHitCreatorSettings.m_crilinEndcapOffsets,
+                               std::vector<float>({0.,0.,0.,0.,0.,0.}));
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
