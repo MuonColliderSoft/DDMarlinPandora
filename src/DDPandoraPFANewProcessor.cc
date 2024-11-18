@@ -128,9 +128,9 @@ std::vector<double> getTrackingRegionExtent(){
   
   
   
-  extent[0]=0.1; ///FIXME! CLIC-specific: Inner radius was set to 0 for SiD-type detectors
-  extent[1]=mainDetector.constantAsDouble("tracker_region_rmax")/dd4hep::mm;
-  extent[2]=mainDetector.constantAsDouble("tracker_region_zmax")/dd4hep::mm;
+  extent.push_back(0.1);///FIXME! CLIC-specific: Inner radius was set to 0 for SiD-type detectors
+  extent.push_back(mainDetector.constantAsDouble("tracker_region_rmax")/dd4hep::mm);
+  extent.push_back(mainDetector.constantAsDouble("tracker_region_zmax")/dd4hep::mm);
 
   return extent;
   
