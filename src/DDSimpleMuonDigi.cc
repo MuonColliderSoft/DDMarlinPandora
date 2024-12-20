@@ -187,6 +187,7 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 
   flag.setBit(LCIO::CHBIT_LONG);
   flag.setBit(LCIO::CHBIT_ID1);
+  flag.setBit(LCIO::RCHBIT_TIME);
 
   muoncol->setFlag(flag.getFlag());
 
