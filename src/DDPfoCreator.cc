@@ -65,6 +65,14 @@ pandora::StatusCode DDPfoCreator::CreateParticleFlowObjects(EVENT::LCEvent *pLCE
     this->InitialiseSubDetectorNames(subDetectorNames);
     pClusterCollection->parameters().setValues("ClusterSubdetectorNames", subDetectorNames);
 
+    StringVec shapeParams ;
+    shapeParams.push_back("Shape_cog_x");
+    shapeParams.push_back("Shape_cog_y");
+    shapeParams.push_back("Shape_cog_z");
+    shapeParams.push_back("Shape_width");
+
+    pClusterCollection->parameters().setValues( "ClusterShapeParameters" , shapeParams );
+
     // Create lcio "reconstructed particles" from the pandora "particle flow objects"
     for (pandora::PfoList::const_iterator pIter = pPandoraPfoList->begin(), pIterEnd = pPandoraPfoList->end(); pIter != pIterEnd; ++pIter)
     {
@@ -217,10 +225,17 @@ void DDPfoCreator::SetClusterPositionAndError(const unsigned int nHitsInCluster,
         pLcioCluster->setIPhi(std::atan2(pClusterShapes->getEigenVecInertia()[1], pClusterShapes->getEigenVecInertia()[0]));
         pLcioCluster->setITheta(std::acos(pClusterShapes->getEigenVecInertia()[2]));
         pLcioCluster->setPosition(pClusterShapes->getCentreOfGravity());
-        //ATTN these two lines below would only compile with ilcsoft HEAD V2015-10-13 and above
-        //pLcioCluster->setPositionError(pClusterShapes->getCenterOfGravityErrors());
-        //pLcioCluster->setDirectionError(pClusterShapes->getEigenVecInertiaErrors());
+        pLcioCluster->setPositionError(pClusterShapes->getCenterOfGravityErrors());
+        pLcioCluster->setDirectionError(pClusterShapes->getEigenVecInertiaErrors());
         clusterPositionVec.SetValues(pClusterShapes->getCentreOfGravity()[0], pClusterShapes->getCentreOfGravity()[1], pClusterShapes->getCentreOfGravity()[2]);
+
+        FloatVec shape;
+        shape.push_back(pClusterShapes->getCentreOfGravity()[0]);
+        shape.push_back(pClusterShapes->getCentreOfGravity()[1]);
+        shape.push_back(pClusterShapes->getCentreOfGravity()[2]);
+        shape.push_back(pClusterShapes->getWidth());
+        pLcioCluster->setShape(shape);
+
     }
     catch (...)
     {
