@@ -16,6 +16,7 @@
 #include "LCPlugins/LCSoftwareCompensation.h"
 
 #include "DDExternalClusteringAlgorithm.h"
+#include "MCMuonReconstructionAlgorithm.h"
 #include "DDPandoraPFANewProcessor.h"
 
 #include "DD4hep/Detector.h"
@@ -28,7 +29,6 @@
 #include "DDTrackCreatorCLIC.h"
 
 #include "DDBFieldPlugin.h"
-
 
 #include <cstdlib>
 
@@ -316,6 +316,9 @@ pandora::StatusCode DDPandoraPFANewProcessor::RegisterUserComponents() const
     PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, PandoraApi::RegisterAlgorithmFactory(*m_pPandora,
         "ExternalClustering", new DDExternalClusteringAlgorithm::Factory));
     
+    PANDORA_RETURN_RESULT_IF(pandora::STATUS_CODE_SUCCESS, !=, PandoraApi::RegisterAlgorithmFactory(*m_pPandora,
+        "MCMuonReconstruction", new MCMuonReconstructionAlgorithm::Factory));
+
     lc_content::LCSoftwareCompensationParameters softwareCompensationParameters;
     softwareCompensationParameters.m_softCompParameters = m_settings.m_softCompParameters;
     softwareCompensationParameters.m_softCompEnergyDensityBins = m_settings.m_softCompEnergyDensityBins;
