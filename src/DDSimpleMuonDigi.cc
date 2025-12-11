@@ -18,6 +18,8 @@
 #include "DD4hep/DD4hepUnits.h"
 #include "DDRec/DetectorData.h"
 
+#include "math.h"
+
 using namespace std;
 using namespace lcio ;
 using namespace marlin ;
@@ -103,6 +105,32 @@ DDSimpleMuonDigi::DDSimpleMuonDigi() : Processor("DDSimpleMuonDigi") {
                              "Name of the endcap subdetector" , 
                              _detectorNameEndcap, 
                              std::string("YokeEndcap"));
+
+  //LP: new parameters
+
+  registerProcessorParameter( "MuonHitsTimeResolution",
+			      "Time resolution of the muon detector hits",
+			      _timeResolution,
+			      _timeResolution
+			      );
+
+  registerProcessorParameter( "HitAngleRegions",
+			      "Hit angle region delimiters",
+			      _angleRegions,
+			      _angleRegions
+			      );
+
+  registerProcessorParameter( "MinTimeHitCuts",
+			      "Min time cut by hit region",
+			      _timeMins,
+			      _timeMins
+			      );
+
+  registerProcessorParameter( "MaxTimeHitCuts",
+			      "Max time cut by hit region",
+			      _timeMaxs,
+			      _timeMaxs
+			      );
 }
 
 void DDSimpleMuonDigi::init() {
@@ -120,7 +148,7 @@ void DDSimpleMuonDigi::init() {
 
   try{
     
-    dd4hep::Detector & mainDetector = dd4hep::Detector::getInstance();
+    dd4hep::Detector &mainDetector = dd4hep::Detector::getInstance();
     dd4hep::DetElement theDetector = mainDetector.detector(_detectorNameBarrel);
     const dd4hep::rec::LayeredCalorimeterData *yokeBarrelParameters  = theDetector.extension<dd4hep::rec::LayeredCalorimeterData>();
     layersBarrel =  yokeBarrelParameters->layers.size();
@@ -129,7 +157,7 @@ void DDSimpleMuonDigi::init() {
   }
   try{
     
-    dd4hep::Detector & mainDetector = dd4hep::Detector::getInstance();
+    dd4hep::Detector &mainDetector = dd4hep::Detector::getInstance();
     dd4hep::DetElement theDetector = mainDetector.detector(_detectorNameEndcap);
     const dd4hep::rec::LayeredCalorimeterData *yokeEndcapParameters  = theDetector.extension<dd4hep::rec::LayeredCalorimeterData>();
     layersEndcap =  yokeEndcapParameters->layers.size();
@@ -161,8 +189,13 @@ void DDSimpleMuonDigi::init() {
       }
     }
   }
+// --- Get the muon detector IDs
+  dd4hep::Detector &theDet = dd4hep::Detector::getInstance();
+  _muonDetBarrel = theDet.constant<unsigned int>("DetID_Yoke_Barrel");
+  _muonDetEndcap = theDet.constant<unsigned int>("DetID_Yoke_Endcap");
 
-
+  _rng = gsl_rng_alloc(gsl_rng_ranlxs2);
+  marlin::Global::EVENTSEEDER->registerProcessor(this);
 }
 
 
@@ -173,6 +206,8 @@ void DDSimpleMuonDigi::processRunHeader( LCRunHeader* /*run*/) {
 
 void DDSimpleMuonDigi::processEvent( LCEvent * evt ) { 
     
+  // --- Seed the random generator engine
+  gsl_rng_set( _rng, marlin::Global::EVENTSEEDER->getSeed(this) ) ;
 
   streamlog_out( DEBUG ) << " process event : " << evt->getEventNumber() 
 			 << " - run  " << evt->getRunNumber() << std::endl ;
@@ -187,6 +222,7 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
 
   flag.setBit(LCIO::CHBIT_LONG);
   flag.setBit(LCIO::CHBIT_ID1);
+  flag.setBit(LCIO::RCHBIT_TIME);
 
   muoncol->setFlag(flag.getFlag());
 
@@ -203,35 +239,50 @@ void DDSimpleMuonDigi::processEvent( LCEvent * evt ) {
     CHT::Layout caloLayout = layoutFromString( colName ) ; 
 
     try{
+
       LCCollection * col = evt->getCollection( _muonCollections[i].c_str() ) ;
       initString = col->getParameters().getStringVal(LCIO::CellIDEncoding);
       int numElements = col->getNumberOfElements();
       CellIDDecoder<SimCalorimeterHit> idDecoder( col );
+
       for (int j(0); j < numElements; ++j) {
-	SimCalorimeterHit * hit = dynamic_cast<SimCalorimeterHit*>( col->getElementAt( j ) ) ;
-	float energy = hit->getEnergy();
-	int cellid = hit->getCellID0();
-	int cellid1 = hit->getCellID1();
-	//Get The LayerNumber 
-	unsigned int layer = abs( idDecoder(hit)[ _cellIDLayerString ] ) ;
-	//Check if we want to use this layer, else go to the next hit
-	if( !useLayer(caloLayout, layer) ) continue;
-	float calibr_coeff(1.);
-	calibr_coeff = _calibrCoeffMuon;
-	float hitEnergy = calibr_coeff*energy;
-	if(hitEnergy>_maxHitEnergyMuon)hitEnergy=_maxHitEnergyMuon;
-	if (hitEnergy > _thresholdMuon) {
-	  CalorimeterHitImpl * calhit = new CalorimeterHitImpl();
-	  calhit->setCellID0(cellid);
-	  calhit->setCellID1(cellid1);
-	  calhit->setEnergy(hitEnergy);
-	  calhit->setPosition(hit->getPosition());
-	  calhit->setType( CHT( CHT::muon, CHT::yoke, caloLayout ,  idDecoder(hit)[ _cellIDLayerString ] ) );
-	  calhit->setTime( computeHitTime(hit) );
-	  calhit->setRawHit(hit);
-	  muoncol->addElement(calhit);
-	  calohitNav.addRelation(calhit, hit, 1.0);
-	}
+
+	      SimCalorimeterHit * hit = dynamic_cast<SimCalorimeterHit*>( col->getElementAt( j ) ) ;
+	      float energy = hit->getEnergy();
+        int cellid = hit->getCellID0();
+        int cellid1 = hit->getCellID1();
+        unsigned int system = idDecoder(hit)["system"];
+
+        //Get The LayerNumber 
+        unsigned int layer = abs( idDecoder(hit)[ _cellIDLayerString ] ) ;
+        //Check if we want to use this layer, else go to the next hit
+        if( !useLayer(caloLayout, layer) ) continue;
+
+        //calibrate energy deposition
+        float calibr_coeff(1.);
+        calibr_coeff = _calibrCoeffMuon;
+        float hitEnergy = calibr_coeff*energy;
+        if(hitEnergy>_maxHitEnergyMuon)hitEnergy=_maxHitEnergyMuon;
+
+        //get hit time, smear and check against time window
+        float hitTime = computeHitTime(hit);
+        hitTime += gsl_ran_gaussian(_rng, _timeResolution);
+
+        bool hitInTimeWindow = timeHitCut(hit->getPosition(), hitTime);
+
+        //fill if hit passes energy and time filter
+        if (hitEnergy > _thresholdMuon && hitInTimeWindow) {
+          CalorimeterHitImpl * calhit = new CalorimeterHitImpl();
+          calhit->setCellID0(cellid);
+          calhit->setCellID1(cellid1);
+          calhit->setEnergy(hitEnergy);
+          calhit->setPosition(hit->getPosition());
+          calhit->setType( CHT( CHT::muon, CHT::yoke, caloLayout ,  idDecoder(hit)[ _cellIDLayerString ] ) );
+          calhit->setTime(hitTime);
+          calhit->setRawHit(hit);
+          muoncol->addElement(calhit);
+          calohitNav.addRelation(calhit, hit, 1.0);
+        }
 
       }
     }
@@ -275,7 +326,10 @@ float DDSimpleMuonDigi::computeHitTime( const EVENT::SimCalorimeterHit *h ) cons
   }
   // Sort sim hit MC contribution by time.
   // Accumulate the energy from earliest time till the energy
-  // threshold is reached. The hit time is then estimated at this position in the array 
+  // threshold is reached. The hit time is then estimated at this position in the array
+  const float* pos = h->getPosition();
+  float deltaT = std::sqrt(pos[0]*pos[0]+pos[1]*pos[1]+pos[2]*pos[2]) / _cmm;
+  
   using entry_type = std::pair<float, float> ;
   std::vector<entry_type> timeToEnergyMapping {} ;
 
@@ -292,9 +346,50 @@ float DDSimpleMuonDigi::computeHitTime( const EVENT::SimCalorimeterHit *h ) cons
   for(auto &entry : timeToEnergyMapping ) {
     energySum += entry.second * _calibrCoeffMuon;
     if( energySum > _timeThresholdMuon ) {
-      return entry.first ;
+      return entry.first - deltaT; //correct for ToF
     }
   }
-  // default case. That should not happen ...
-  return 0.f ;
+  
+  return 999.f ; //threshold not overcome
+}
+
+// void DDSimpleMuonDigi::smearPosition(const float* pos, float* corr_pos){
+
+//   //cylindrical coordinate sys
+//   float x = pos[0];
+//   float y = pos[1];
+//   float z = pos[2];
+//   float r = std::sqrt(x*x+y*y);
+//   float phi = std::acos(x/r); 
+
+//   float phiResol = _xyResolution / r;
+
+//   //smear the zPhi, assuming the det is approx a cylinder
+//   float phiSmear = phi + gsl_ran_gaussian(_rng, phiResol);
+//   float zSmear = z + gsl_ran_gaussian(_rng, _xyResolution);
+
+//   float xSmear = r * std::cos(phiSmear);
+//   float ySmear = (y > 0. ? 1. : -1.) * r * std::sin(phiSmear);
+
+//   corr_pos[0] = xSmear;
+//   corr_pos[1] = ySmear;
+//   corr_pos[2] = zSmear;
+
+//   return;
+// }
+
+bool DDSimpleMuonDigi::timeHitCut(const float* pos, float t){
+
+  float x = pos[0], y = pos[1], z = pos[2];
+  float theta = std::acos( z / std::sqrt( x*x + y*y + z*z ) ) * 180. / 3.14159;
+  theta = theta < 90. ? theta : 180. - theta;
+
+  int idx = 0;
+  for(int i = 0; i < _angleRegions.size(); i++){
+    if(theta < _angleRegions[i]) break;
+    idx++;
+  }
+
+  if(t > _timeMins[idx] && t < _timeMaxs[idx]) return true;
+  else return false;
 }

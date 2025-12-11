@@ -128,9 +128,9 @@ std::vector<double> getTrackingRegionExtent(){
   
   
   
-  extent[0]=0.1; ///FIXME! CLIC-specific: Inner radius was set to 0 for SiD-type detectors
-  extent[1]=mainDetector.constantAsDouble("tracker_region_rmax")/dd4hep::mm;
-  extent[2]=mainDetector.constantAsDouble("tracker_region_zmax")/dd4hep::mm;
+  extent.push_back(0.1);///FIXME! CLIC-specific: Inner radius was set to 0 for SiD-type detectors
+  extent.push_back(mainDetector.constantAsDouble("tracker_region_rmax")/dd4hep::mm);
+  extent.push_back(mainDetector.constantAsDouble("tracker_region_zmax")/dd4hep::mm);
 
   return extent;
   
@@ -854,6 +854,17 @@ void DDPandoraPFANewProcessor::ProcessSteeringFile()
                                "The minimum correction to on ecal hit in Pandora energy correction",
                                m_settings.m_minCleanCorrectedHitEnergy,
                                softwareCompensationParameters.m_minCleanCorrectedHitEnergy);
+
+    ///LEOP == offset subtraction in ECal
+    registerProcessorParameter("CrilinBarrelOffsets",
+                               "Energy offsets to subtract in CRILIN ECal barrel in MeV",
+                               m_caloHitCreatorSettings.m_crilinBarrelOffsets,
+                               std::vector<float>({0.,0.,0.,0.,0.,0.}));
+                               
+    registerProcessorParameter("CrilinEndcapOffsets",
+                               "Energy offsets to subtract in CRILIN ECal endcap in MeV",
+                               m_caloHitCreatorSettings.m_crilinEndcapOffsets,
+                               std::vector<float>({0.,0.,0.,0.,0.,0.}));
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

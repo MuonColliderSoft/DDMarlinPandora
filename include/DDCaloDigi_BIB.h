@@ -103,8 +103,32 @@ class DDCaloDigi_BIB : public Processor {
   float digitalEcalCalibCoeff(int layer );
 
   float analogueEcalCalibCoeff(int layer );
+  
+  
+  float triggerThreshold(float &x, float &y, float &z, CHT::Layout &caloLayout, bool &useCrilin);
+  double integrationEfficiency(float &t_arrival, float &t_max, bool &useCrilin);
+  void GetEnergyTimeCutsCrilinBarrel(float &x, float &y, float &z, double &timeMin, double &timeMax, double &eneCut);
+  void GetEnergyTimeCutsCrilinEndcap(float &x, float &y, float &z, double &timeMin, double &timeMax, double &eneCut);
+  bool applyDifferentialThresholdEcalBIB(float &x, float &y, float &z, float &t, float &en, bool &useCrilin, CHT::Layout &caloLayout);
+  
 
  protected:
+  
+  
+  ///> ///> NEW PARAMETERS FOR CRILIN TIME-ENERGY CUTS ========================
+  float _preselectionTimeCut;
+  std::vector<float> _crilinBarrelThresholds;
+  std::vector<float> _crilinEndcapThresholds;
+  std::vector<float> _crilinBarrelTimeMin;
+  std::vector<float> _crilinEndcapTimeMin; 
+  std::vector<float> _crilinBarrelTimeMax;
+  std::vector<float> _crilinEndcapTimeMax; 
+
+  ///> 	NEW PARAMETERS FOR TRIGGER ========================================
+  float _decayConst;
+  float _blindTime; 
+  std::vector<float> _crilinBarrelTrigger;
+  std::vector<float> _crilinEndcapTrigger;
 
   float ecalEnergyDigi(float energy, int id0, int id1);
   float ahcalEnergyDigi(float energy, int id0, int id1);
@@ -136,6 +160,7 @@ class DDCaloDigi_BIB : public Processor {
   std::string _unitThresholdEcal = "GeV";
   std::vector<float> _thresholdHcal{};
   std::string _unitThresholdHcal = "GeV";
+  
 
   int _digitalEcal = 0;
   int _mapsEcalCorrection = 0;
@@ -209,8 +234,7 @@ class DDCaloDigi_BIB : public Processor {
   float _deadCellFractionEcal = 0.0;  // fraction of random dead channels
   bool  _deadCellEcal_keep = false;   // keep same cells dead between events?
 
-  bool  _useCLIC = false;   // use CLIC calorimeter
-  bool  _useCrilin = false;   // use Crilin
+  bool  _useCrilin = false;   // use Crilin Barrel
 
   float _strip_abs_length = 1000000;  // absorption length along strip for non-uniformity modeling
   float _ecal_pixSpread = 0.05;       // relative spread of MPPC pixel signal

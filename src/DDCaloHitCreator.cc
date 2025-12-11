@@ -88,6 +88,8 @@ pandora::StatusCode DDCaloHitCreator::CreateCaloHits(const EVENT::LCEvent *const
 
 pandora::StatusCode DDCaloHitCreator::CreateECalCaloHits(const EVENT::LCEvent *const pLCEvent)
 {
+    float subtrEne = 0.;
+
     for (StringVector::const_iterator iter = m_settings.m_eCalCaloHitCollections.begin(), iterEnd = m_settings.m_eCalCaloHitCollections.end();
         iter != iterEnd; ++iter)
     {
@@ -176,21 +178,28 @@ pandora::StatusCode DDCaloHitCreator::CreateECalCaloHits(const EVENT::LCEvent *c
 					      << std::endl;
 
                       this->GetBarrelCaloHitProperties(pCaloHit, barrelLayers, m_settings.m_eCalBarrelInnerSymmetry, caloHitParameters, m_settings.m_eCalBarrelNormalVector, absorberCorrection);
-
-                        caloHitParameters.m_hadronicEnergy = eCalToHadGeVBarrel * pCaloHit->getEnergy();
+                        
+                        subtrEne = SubtractedEnergy(pCaloHit->getPosition()[0], pCaloHit->getPosition()[1], pCaloHit->getPosition()[2], pCaloHit->getEnergy(), false);
+                        if(subtrEne < 0.) continue;
+                        
+                        caloHitParameters.m_hadronicEnergy = eCalToHadGeVBarrel * subtrEne;
                     }
                     else
                     {
                         this->GetEndCapCaloHitProperties(pCaloHit, endcapLayers, caloHitParameters, absorberCorrection);
-                        caloHitParameters.m_hadronicEnergy = eCalToHadGeVEndCap * pCaloHit->getEnergy();
+
+                        subtrEne = SubtractedEnergy(pCaloHit->getPosition()[0], pCaloHit->getPosition()[1], pCaloHit->getPosition()[2], pCaloHit->getEnergy(), true);
+                        if(subtrEne < 0.) continue;
+                        
+                        caloHitParameters.m_hadronicEnergy = eCalToHadGeVEndCap * subtrEne;
                     }
 
-                    caloHitParameters.m_mipEquivalentEnergy = pCaloHit->getEnergy() * eCalToMip * absorberCorrection;
+                    caloHitParameters.m_mipEquivalentEnergy = subtrEne * eCalToMip * absorberCorrection;
 
                     if (caloHitParameters.m_mipEquivalentEnergy.Get() < eCalMipThreshold)
                         continue;
 
-                    caloHitParameters.m_electromagneticEnergy = eCalToEMGeV * pCaloHit->getEnergy();
+                    caloHitParameters.m_electromagneticEnergy = eCalToEMGeV * subtrEne;
 
                     // ATTN If using strip splitting, must correct cell sizes for use in PFA to minimum of strip width and strip length
                     if (m_settings.m_stripSplittingOn)
@@ -810,6 +819,68 @@ float DDCaloHitCreator::GetMaximumRadius(const EVENT::CalorimeterHit *const pCal
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
+///LEOP == functions to subtract offset from ecal hits, only for CRILIN ecal
+float DDCaloHitCreator::GetOffsetCrilinBarrel(float &x, float &y, float &z){
+
+    float r = sqrt(x*x+y*y);
+
+    float phi_rel= acos(x/r);
+    if (y<0) phi_rel = -phi_rel+2*3.14159;
+    phi_rel = phi_rel - round( phi_rel / ( 2 * 3.14159 / 12 ) ) * 2 * 3.14159 / 12;
+    float x_rel = r*cos(phi_rel);
+
+    float nZones = ((float)m_settings.m_crilinBarrelOffsets.size()) / 6.;
+
+    int nx = 0;
+
+    if (x_rel<1720.) nx=0;
+    else if (x_rel>1720. && x_rel<1770.) nx=1;
+    else if (x_rel>1770. && x_rel<1810.) nx=2;
+    else if (x_rel>1810. && x_rel<1860.) nx=3;
+    else if (x_rel>1860. && x_rel<1900.) nx=4;
+    else if (x_rel>1900.) nx=5;
+
+    int nz = (int)abs( z / ( 2210. / nZones ) );
+	if (nz > nZones - 1) nz = nZones - 1;
+
+    return m_settings.m_crilinBarrelOffsets[ nx*(int)nZones+nz ] * 0.001;
+}
+
+float DDCaloHitCreator::GetOffsetCrilinEndcap(float &x, float &y, float &z){
+
+	float r_rel = sqrt(x*x+y*y) - 305.; //relative to endcap inner radius (-5mm tolerance)
+	
+	float nZones = ((float)m_settings.m_crilinEndcapOffsets.size()) / 6.;
+	
+	int nx = 0;
+	if (abs(z)<2350.) nx=0;
+    else if (abs(z)>2350. && abs(z)<2400.) nx=1;
+    else if (abs(z)>2400. && abs(z)<2450.) nx=2;
+    else if (abs(z)>2450. && abs(z)<2490.) nx=3;
+    else if (abs(z)>2490. && abs(z)<2530.) nx=4;
+    else if (abs(z)>2530.) nx=5;
+	
+	int nz = (int) r_rel / ( 1395. / nZones );
+	if( nz < 0 ) nz = 0;
+	else if( nz > nZones - 1 ) nz = nZones - 1;
+	
+	return m_settings.m_crilinEndcapOffsets[ nx*(int)nZones+nz ] * 0.001;
+}
+
+float DDCaloHitCreator::SubtractedEnergy(float x, float y, float z, float en, bool useEndcap){
+
+    float offset = 0.;
+
+    if(useEndcap) offset = GetOffsetCrilinEndcap(x, y, z);
+    else offset = GetOffsetCrilinBarrel(x, y, z);
+
+    float energy = en - offset;
+    energy = energy>0. ? energy : -1.;
+    
+    return energy;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------------------------------------------------------------
 
 DDCaloHitCreator::Settings::Settings()
@@ -865,6 +936,10 @@ DDCaloHitCreator::Settings::Settings()
     m_hCalBarrelOuterSymmetry(0.f),
     m_eCalBarrelNormalVector({0.0, 0.0, 1.0}),
     m_hCalBarrelNormalVector({0.0, 0.0, 1.0}),
-    m_muonBarrelNormalVector({0.0, 0.0, 1.0})
+    m_muonBarrelNormalVector({0.0, 0.0, 1.0}),
+
+    ///LEOP == offset subtraction parameters for ECal
+    m_crilinBarrelOffsets({0.,0.,0.,0.,0.,0.}),
+    m_crilinEndcapOffsets({0.,0.,0.,0.,0.,0.})
 {
 }
