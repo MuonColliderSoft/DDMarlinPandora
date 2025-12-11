@@ -7,6 +7,12 @@
 #include <vector>
 
 #include "CalorimeterHitType.h"
+#include "TFormula.h"
+#include "marlin/ProcessorEventSeeder.h"
+#include "marlin/AIDAProcessor.h"
+#include "marlin/Global.h"
+#include "gsl/gsl_rng.h"
+#include "gsl/gsl_randist.h"
 
 
 using namespace lcio ;
@@ -47,8 +53,12 @@ class DDSimpleMuonDigi : public Processor {
 
   bool useLayer(CHT::Layout caloLayout, unsigned int layer) ;
   float computeHitTime( const EVENT::SimCalorimeterHit *h ) const ;
-  
+  void smearPosition(const float* pos, float* corr_pos);
+  bool timeHitCut(const float* pos, float t);
+
  protected:
+
+  gsl_rng* _rng {nullptr};
 
   int _nRun = 0;
   int _nEvt = 0;
@@ -67,10 +77,18 @@ class DDSimpleMuonDigi : public Processor {
   float _timeThresholdMuon = _thresholdMuon ;
   float _calibrCoeffMuon = 120000;
   float _maxHitEnergyMuon = 2.0;
+  
+  float _timeResolution = 0.1; // [ns]
+  float _cmm = 299.792458;  // [mm/ns]
 
   std::string _detectorNameBarrel = "YokeBarrel";
   std::string _detectorNameEndcap = "YokeEndcap";
+  unsigned int _muonDetBarrel;
+  unsigned int _muonDetEndcap;
   
+  std::vector<float> _angleRegions{};
+  std::vector<float> _timeMins = {-1.0};
+  std::vector<float> _timeMaxs = {5.0};
   
 } ;
 
